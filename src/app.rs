@@ -22,21 +22,62 @@ live_design! {
         }
     }
 
+    ImageRow = {{ImageRow}} {
+        <PortalList> {
+            height: 256,
+            flow: Right,
+            ImageItem = <ImageItem> {}
+        }
+    }
+
     App = {{App}} {
         ui: <Window> {
             body = <View> {
-                <ImageItem> {}
+                // <ImageItem> {}
+                <ImageRow> {}
             }
         }
     }
 }
+
+#[derive(Live, LiveHook, Widget)]
+pub struct ImageRow {
+    #[deref]
+    view: View,
+}
+
+impl Widget for ImageRow {
+
+    fn draw_walk(
+        &mut self, 
+        cx: &mut Cx2d, 
+        scope: &mut Scope, 
+        walk: Walk
+    ) -> DrawStep {
+        while let Some(item) =self.view.draw_walk(cx, scope, walk).step() {
+            if let Some(mut list) = item.as_portal_list().borrow_mut() {
+                list.set_item_range(cx, 0, 4);
+                while let Some(item_idx) = list.next_visible_item(cx) {
+                    let item = list.item(cx, item_idx, live_id!(ImageItem));
+                    item.draw_all(cx, &mut Scope::empty());
+                }
+            }
+        }
+        DrawStep::done()
+    }
+
+    fn handle_event(&mut self, cx: &mut Cx, event: &Event, scope: &mut Scope) {
+        self.view.handle_event(cx, event, scope)
+    }
+}
+
 
 
 // Define App struct containing UI and counter
 #[derive(Live, LiveHook)]
 pub struct App {
     #[live]
-    ui: WidgetRef // UI component reference
+    ui: WidgetRef, // UI component reference
 }
 
 // Implement LiveRegister trait for registering live design
