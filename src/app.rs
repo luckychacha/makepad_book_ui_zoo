@@ -125,8 +125,8 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
-            num_images: 12,
-            max_images_per_row: 5,
+            num_images: 7,
+            max_images_per_row: 4,
         }
     }
 }
