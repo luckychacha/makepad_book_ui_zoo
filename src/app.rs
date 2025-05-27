@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use makepad_widgets::*; // Import Makepad Widgets package
 
 
@@ -64,11 +66,22 @@ impl Widget for ImageRow {
     ) -> DrawStep {
         while let Some(item) =self.view.draw_walk(cx, scope, walk).step() {
             if let Some(mut list) = item.as_portal_list().borrow_mut() {
-                list.set_item_range(cx, 0, 4);
+                let state = scope.data.get_mut::<State>().unwrap();
+                let row_idx = *scope.props.get::<usize>().unwrap();
+                list.set_item_range(cx, 0, state.num_images_for_row(row_idx));
                 while let Some(item_idx) = list.next_visible_item(cx) {
+                    if item_idx >= state.num_images_for_row(row_idx) {
+                        continue;
+                    }
                     // log the item index
                     println!("item_idx: {}", item_idx);
                     let item = list.item(cx, item_idx, live_id!(ImageItem));
+                    let first_image_idx = state.first_image_idx_for_row(row_idx);
+                    let image_idx = first_image_idx + item_idx;
+                    let image_path = &state.image_paths[image_idx];
+                    let image = item.image(id!(image));
+                    println!("image_path: {}", image_path.display());
+                    image.load_image_file_by_path_async(cx, &image_path).unwrap();
                     item.draw_all(cx, &mut Scope::empty());
                 }
             }
@@ -98,14 +111,15 @@ impl Widget for ImageGrid {
             if let Some(mut list) = item.as_portal_list().borrow_mut() {
                 let state = scope.data.get_mut::<State>().unwrap();
                 list.set_item_range(cx, 0, state.num_rows());
-                while let Some(item_idx) = list.next_visible_item(cx) {
-                    if item_idx >= state.num_rows() {
+                while let Some(row_idx) = list.next_visible_item(cx) {
+                    if row_idx >= state.num_rows() {
                         continue;
                     }
                     // log the item index
-                    println!("item_idx: {}", item_idx);
-                    let item = list.item(cx, item_idx, live_id!(ImageRow));
-                    item.draw_all(cx, &mut Scope::empty());
+                    let row = list.item(cx, row_idx, live_id!(ImageRow));
+                    let mut scope = Scope::with_data_props(state, &row_idx);
+
+                    row.draw_all(cx, &mut scope);
                 }
             }
         }
@@ -117,15 +131,16 @@ impl Widget for ImageGrid {
     }
 }
 
+#[derive(Debug)]
 pub struct State {
-    num_images: usize,
+    image_paths: Vec<PathBuf>,
     max_images_per_row: usize,
 }
 
 impl Default for State {
     fn default() -> Self {
         Self {
-            num_images: 7,
+            image_paths: Vec::new(),
             max_images_per_row: 4,
         }
     }
@@ -133,7 +148,7 @@ impl Default for State {
 
 impl State {
     fn num_images(&self) -> usize {
-        self.num_images
+        self.image_paths.len()
     }
 
     fn num_rows(&self) -> usize {
@@ -152,7 +167,7 @@ impl State {
 }
 
 // Define App struct containing UI and counter
-#[derive(Live, LiveHook)]
+#[derive(Live)]
 pub struct App {
     #[live]
     ui: WidgetRef, // UI component reference
@@ -160,11 +175,33 @@ pub struct App {
     state: State,
 }
 
+impl App {
+    fn load_image_paths(&mut self, cx: &mut Cx, path: &Path) {
+        self.state.image_paths.clear();
+        for entry in path.read_dir().unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            self.state.image_paths.push(path);
+        }
+        self.ui.redraw(cx);
+    }
+}
+
 // Implement LiveRegister trait for registering live design
 impl LiveRegister for App {
     fn live_register(cx: &mut Cx) {
         // Register Makepad Widgets' live design
         makepad_widgets::live_design(cx);
+    }
+}
+
+impl LiveHook for App {
+    fn after_new_from_doc(&mut self, cx: &mut Cx) {
+        let path = "/Users/jim/Codes/Rust/images/";
+        self.load_image_paths(cx, path.as_ref());
     }
 }
 
